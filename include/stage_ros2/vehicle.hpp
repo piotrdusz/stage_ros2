@@ -11,6 +11,10 @@
 #include <ackermann_msgs/msg/ackermann_drive.hpp>
 #include <ackermann_msgs/msg/ackermann_drive_stamped.hpp>
 #include <nav_msgs/msg/odometry.hpp>
+#pragma push_macro("Bool")
+#undef Bool
+#include <std_msgs/msg/bool.hpp>
+#pragma pop_macro("Bool")
 #include <stage_ros2/transform_broadcaster.h>
 #include <stage_ros2/static_transform_broadcaster.h>
 
@@ -23,6 +27,8 @@
 
 namespace stage_ros2 {
 
+using CollisionMsg = std_msgs::msg::Bool_<std::allocator<void>>;
+
 // Forward declaration to avoid circular dependency
 class StageNode;
 
@@ -32,6 +38,7 @@ public:
 
 private:
   bool initialized_;
+  bool collision_ = false;
   size_t id_;
   Stg::Pose initial_pose_;
   std::string name_;     /// used for the ros publisher
@@ -61,6 +68,7 @@ public:
   Vehicle(size_t id, const Stg::Pose & pose, const std::string & name, StageNode * node);
 
   void soft_reset();
+  void prepare_for_teleport();
   size_t id() const;
   const std::string & name() const;
   const std::string & name_space() const;
@@ -86,6 +94,7 @@ public:
   // ros publishers
   rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr pub_odom_;                     // one odom
   rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr pub_ground_truth_;             // one ground truth
+  rclcpp::Publisher<CollisionMsg>::SharedPtr pub_collision_;
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr sub_cmd_;                 // one cmd_vel subscriber
   rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr sub_cmd_stamped_;  // one sub_cmd_stamped_ subscriber
   rclcpp::Subscription<ackermann_msgs::msg::AckermannDrive>::SharedPtr sub_drive_;     // one drive subscriber

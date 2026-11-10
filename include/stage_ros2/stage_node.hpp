@@ -1,10 +1,18 @@
 #ifndef STAGE_ROS2_PKG__STAGE_ROS_HPP_
 #define STAGE_ROS2_PKG__STAGE_ROS_HPP_
+#include <future>
 #include <mutex>
+#include <optional>
+#include <random>
 
 #include <rclcpp/rclcpp.hpp>
 #include <std_srvs/srv/empty.hpp>
+#include <std_srvs/srv/trigger.hpp>
 #include <geometry_msgs/msg/transform_stamped.hpp>
+#include <lifecycle_msgs/srv/get_state.hpp>
+#include <nav2_msgs/srv/set_initial_pose.hpp>
+#include <nav_msgs/msg/occupancy_grid.hpp>
+#include <nav_msgs/msg/path.hpp>
 #include <rosgraph_msgs/msg/clock.hpp>
 #include <stage_ros2/transform_broadcaster.h>
 #include <tf2/LinearMath/Transform.hpp>
@@ -52,6 +60,27 @@ private:
 
   // Service to listening on soft reset signals
   rclcpp::Service<std_srvs::srv::Empty>::SharedPtr srv_reset_;
+
+  struct RandomReset
+  {
+    nav_msgs::msg::OccupancyGrid::ConstSharedPtr map;
+    std::promise<std::optional<Stg::Pose>> result;
+  };
+  std::shared_ptr<RandomReset> pending_random_reset_;
+  nav_msgs::msg::OccupancyGrid::ConstSharedPtr map_;
+  std::mt19937 random_{std::random_device{}()};
+  double reset_clearance_;
+  rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr map_sub_;
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr srv_random_reset_;
+  rclcpp::CallbackGroup::SharedPtr reset_client_group_;
+  rclcpp::Client<nav2_msgs::srv::SetInitialPose>::SharedPtr amcl_pose_client_;
+  rclcpp::Client<lifecycle_msgs::srv::GetState>::SharedPtr amcl_state_client_;
+  rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr stop_follower_client_;
+  rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr clear_path_pub_;
+  void random_reset_callback(
+    const std_srvs::srv::Trigger::Request::SharedPtr,
+    std_srvs::srv::Trigger::Response::SharedPtr response);
+  std::optional<Stg::Pose> random_reset(const nav_msgs::msg::OccupancyGrid & map);
 
   // publisher for the simulated clock
   rclcpp::Publisher<rosgraph_msgs::msg::Clock>::SharedPtr clock_pub_;

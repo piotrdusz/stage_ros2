@@ -1,8 +1,10 @@
 #include "stage_ros2/stage_node.hpp"
 
 #include <chrono>
+#include <cmath>
 #include <filesystem>
 #include <memory>
+#include <stdexcept>
 
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
@@ -85,6 +87,9 @@ void StageNode::declare_parameters()
   this->declare_parameter<std::string>(
     "frame_id_base_link", "base_link",
     param_desc_frame_id_base_link_name_);
+
+  this->declare_parameter<bool>("enable_random_reset", false);
+  this->declare_parameter<double>("random_reset_clearance", 0.35);
 }
 
 void StageNode::update_parameters()
@@ -243,6 +248,10 @@ int StageNode::callback_update_stage_world(Stg::World * world, StageNode * node)
   rosgraph_msgs::msg::Clock clock_msg;
   clock_msg.clock = node->sim_time_;
   node->clock_pub_->publish(clock_msg);
+  if (node->pending_random_reset_) {
+    auto request = std::move(node->pending_random_reset_);
+    request->result.set_value(node->random_reset(*request->map));
+  }
   return 0;
 }
 
@@ -251,6 +260,7 @@ bool StageNode::cb_reset_srv(
   std_srvs::srv::Empty::Response::SharedPtr)
 {
   RCLCPP_INFO(this->get_logger(), "Resetting stage!");
+  std::scoped_lock lock(msg_lock);
   for (auto vehicle: this->vehicles_) {
     vehicle->soft_reset();
   }
@@ -301,6 +311,30 @@ int StageNode::SubscribeModels()
     [this](const std_srvs::srv::Empty::Request::SharedPtr request,
     std_srvs::srv::Empty::Response::SharedPtr response)
     {this->cb_reset_srv(request, response);});
+
+  if (this->get_parameter("enable_random_reset").as_bool()) {
+    reset_clearance_ = this->get_parameter("random_reset_clearance").as_double();
+    if (!std::isfinite(reset_clearance_) || reset_clearance_ < 0.0) {
+      throw std::invalid_argument("random_reset_clearance must be finite and nonnegative");
+    }
+    map_sub_ = this->create_subscription<nav_msgs::msg::OccupancyGrid>(
+      "map", rclcpp::QoS(1).transient_local().reliable(),
+      [this](nav_msgs::msg::OccupancyGrid::ConstSharedPtr map) {
+        std::scoped_lock lock(msg_lock);
+        map_ = std::move(map);
+      });
+    reset_client_group_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+    amcl_pose_client_ = this->create_client<nav2_msgs::srv::SetInitialPose>(
+      "set_initial_pose", rclcpp::ServicesQoS(), reset_client_group_);
+    amcl_state_client_ = this->create_client<lifecycle_msgs::srv::GetState>(
+      "amcl/get_state", rclcpp::ServicesQoS(), reset_client_group_);
+    stop_follower_client_ = this->create_client<std_srvs::srv::Trigger>(
+      "/stop_path_follower", rclcpp::ServicesQoS(), reset_client_group_);
+    clear_path_pub_ = this->create_publisher<nav_msgs::msg::Path>("/path", 10);
+    srv_random_reset_ = this->create_service<std_srvs::srv::Trigger>(
+      "random_reset", std::bind(
+        &StageNode::random_reset_callback, this, std::placeholders::_1, std::placeholders::_2));
+  }
 
   return 0;
 }

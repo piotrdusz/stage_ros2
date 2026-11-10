@@ -9,6 +9,7 @@ namespace stage_ros2 {
 #define TOPIC_TF_STATIC "tf_static"
 #define TOPIC_ODOM "odom"
 #define TOPIC_GROUND_TRUTH "ground_truth"
+#define TOPIC_COLLISION "collision"
 #define TOPIC_CMD_VEL "cmd_vel"
 #define TOPIC_DRIVE "drive"
 
@@ -29,6 +30,20 @@ void Vehicle::soft_reset()
 {
   positionmodel->SetPose(this->initial_pose_);
   positionmodel->SetStall(false);
+  collision_ = false;
+  CollisionMsg message;
+  pub_collision_->publish(message);
+}
+
+void Vehicle::prepare_for_teleport()
+{
+  positionmodel->SetSpeed(0.0, 0.0, 0.0);
+  positionmodel->SetVelocity(Stg::Velocity(0.0, 0.0, 0.0, 0.0));
+  positionmodel->SetStall(false);
+  collision_ = false;
+  CollisionMsg message;
+  pub_collision_->publish(message);
+  global_pose_.reset();
 }
 
 const std::string &Vehicle::name() const
@@ -76,6 +91,8 @@ void Vehicle::init(bool use_topic_prefixes, bool use_one_tf_tree)
   pub_odom_ = node_->create_publisher<nav_msgs::msg::Odometry>(topic_name_odom_, 10);
   pub_ground_truth_ =
       node_->create_publisher<nav_msgs::msg::Odometry>(topic_name_ground_truth_, 10);
+  pub_collision_ = node_->create_publisher<CollisionMsg>(
+      topic_name_space_ + TOPIC_COLLISION, rclcpp::QoS(1).reliable().transient_local());
 
   if(node_->use_ackermann_){
       if(node_->use_stamped_velocity_){
@@ -130,6 +147,11 @@ void Vehicle::publish_msg()
   // Guard
   if (!initialized_)
     return;
+
+  collision_ = collision_ || positionmodel->Stalled();
+  CollisionMsg collision_msg;
+  collision_msg.data = collision_;
+  pub_collision_->publish(collision_msg);
 
   // Get latest odometry data
   // Translate into ROS message format and publish

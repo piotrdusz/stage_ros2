@@ -8,8 +8,12 @@ int main(int argc, char ** argv)
   auto node = std::make_shared<stage_ros2::StageNode>(rclcpp::NodeOptions());
   node->init(argc - 1, argv);
   if (node->SubscribeModels() != 0) {exit(-1);}
-  std::thread t = std::thread([&node]() {rclcpp::spin(node);});
+  rclcpp::executors::MultiThreadedExecutor executor(rclcpp::ExecutorOptions(), 2);
+  executor.add_node(node);
+  std::thread t([&executor]() {executor.spin();});
   node->world->Start();
   Stg::World::Run();
+  executor.cancel();
+  t.join();
   return 0;
 }

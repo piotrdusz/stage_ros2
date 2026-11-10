@@ -8,6 +8,13 @@ It supports multiple robots with one or multiple tf-trees.
 
 ## Stamped velocity Support (TwistStamped)
 This stage ROS2 bridge can be configured to use stamped velocities on the topic __cmd_vel__.
+
+Each robot publishes `collision` (`std_msgs/msg/Bool`) on every simulation update.
+It becomes `true` when Stage detects a collision during attempted movement and
+stays true until `/reset_positions` or a successful `/random_reset`. In a
+multi-robot world or with `enforce_prefixes`, the topic is prefixed by the
+robot name, for example `/robot_0/collision`. The topic uses reliable,
+transient-local QoS so late subscribers receive the latest state.
 ```
 ros2 launch stage_ros2 demo.launch.py world:=cave use_stamped_velocity:=false
 ```

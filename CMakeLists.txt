@@ -19,6 +19,8 @@ find_package(geometry_msgs REQUIRED)
 find_package(marker_msgs REQUIRED)
 find_package(ackermann_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
+find_package(nav2_msgs REQUIRED)
+find_package(lifecycle_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(stage REQUIRED)
 find_package(tf2_ros REQUIRED)
@@ -31,7 +33,7 @@ include_directories(
 )
 
 add_library(stage_node SHARED
-            src/stage_node.cpp src/vehicle.cpp src/ranger.cpp src/fiducial_detector.cpp src/camera.cpp)
+            src/stage_node.cpp src/random_reset.cpp src/vehicle.cpp src/ranger.cpp src/fiducial_detector.cpp src/camera.cpp)
 target_compile_definitions(stage_node PRIVATE "STAGE_ROS2_PACKAGE_DLL")
 target_link_libraries(stage_node PUBLIC
   rclcpp::rclcpp
@@ -41,6 +43,8 @@ target_link_libraries(stage_node PUBLIC
   ${geometry_msgs_TARGETS}
   ${marker_msgs_TARGETS}
   ${nav_msgs_TARGETS}
+  ${nav2_msgs_TARGETS}
+  ${lifecycle_msgs_TARGETS}
   ${std_msgs_TARGETS}
   ${std_srvs_TARGETS}
   ${ackermann_msgs_TARGETS}
